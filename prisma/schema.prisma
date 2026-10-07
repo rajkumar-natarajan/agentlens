@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum AgentVersionState {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+  projects    Project[]
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+}
+
+model Membership {
+  organizationId String
+  userId         String
+  role           MembershipRole @default(MEMBER)
+  createdAt      DateTime       @default(now())
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@index([userId])
+}
+
+model Project {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  slug           String
+  createdAt      DateTime       @default(now())
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agents         Agent[]
+  apiKeys        ApiKey[]
+  policies       Policy[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model Agent {
+  id        String        @id @default(cuid())
+  projectId String
+  name      String
+  createdAt DateTime      @default(now())
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  versions  AgentVersion[]
+
+  @@unique([projectId, name])
+}
+
+model AgentVersion {
+  id          String           @id @default(cuid())
+  agentId     String
+  version     Int
+  state       AgentVersionState @default(DRAFT)
+  config      Json
+  createdAt   DateTime         @default(now())
+  createdById String?
+  agent       Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, version])
+  @@index([agentId, state])
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  keyHash     String   @unique
+  keyPrefix   String
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, revokedAt])
+}
+
+model Policy {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  enabled   Boolean  @default(true)
+  version   Int      @default(1)
+  rules     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+}
